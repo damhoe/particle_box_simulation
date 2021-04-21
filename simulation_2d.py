@@ -54,35 +54,73 @@ class ParticleBox:
         ind1 = ind1[unique]
         ind2 = ind2[unique]
 
-        # update velocities of colliding pairs
-        for i1, i2 in zip(ind1, ind2):
-            # mass
-            m1 = self.m[i1]
-            m2 = self.m[i2]
 
-            # location vector
-            r1 = self.state[i1, :2]
-            r2 = self.state[i2, :2]
+        # update velocities of colliding pairs
+        for k, l in zip(ind1, ind2):
+
+        # iterate over particles
+        #for k, (xk, yk, vxk, vyk) in enumerate(self.state[:-1]):
+
+            #iterate over every other particles
+        #    for l, (xl, yl, vxl, vyl) in enumerate(self.state[k+1:]):
+
+            rk = self.state[k, :2] #arr([xk, yk])
+            rl = self.state[l, :2] #arr([xl, yl])
+
+            r_rel = rk - rl
+
+            # calc distance
+            s2 = np.dot(r_rel, r_rel)
+
+            # check distance
+            if (s2 > self.ps * self.ps):
+                continue
+
+            #-----------
+            # collision
+            #-----------
 
             # velocity vector
-            v1 = self.state[i1, 2:]
-            v2 = self.state[i2, 2:]
+            vk = self.state[k, 2:] #arr([vxl, vyl])
+            vl = self.state[l, 2:] #arr([vxk, vyk])
 
-            # relative location & velocity vectors
-            r_rel = r1 - r2
-            v_rel = v1 - v2
+            #print(self.state[k, 2:], self.state[l, 2:])
+
+            v_rel = vk - vl
+
+            # in case collisions happend before
+
+            d = self.ps - np.sqrt(s2)
+            dtau = d / np.sqrt(np.dot(v_rel, v_rel))
+            rk -= dtau * vk
+            rl -= dtau * vl
+
+            r_rel = rk - rl
+            s2 = np.dot(r_rel, r_rel)
+
+            # mass
+            ml = self.m[l]
+            mk = self.m[k]
 
             # momentum vector of the center of mass
-            v_cm = (m1 * v1 + m2 * v2) / (m1 + m2)
+            v_com = (ml * vl + mk * vk) * 1. / (ml + mk)
+
+            # v in com
+            vk_com = v_rel * mk * 1./(ml + mk)
+            vl_com = -v_rel * ml * 1./(ml + mk)
 
             # collisions of spheres reflect v_rel over r_rel
-            rr_rel = np.dot(r_rel, r_rel)
-            vr_rel = np.dot(v_rel, r_rel)
-            v_rel = 2. * r_rel * vr_rel / rr_rel - v_rel
+            vk_com -= 2. * np.dot(vk_com, r_rel) * r_rel / s2
+            vl_com -= 2. * np.dot(vl_com, r_rel) * r_rel / s2
 
             # assign new velocities
-            self.state[i1, 2:] = v_cm + v_rel * m2 * 1. / (m1 + m2)
-            self.state[i2, 2:] = v_cm - v_rel * m1 * 1. / (m1 + m2)
+            self.state[k, 2:] = v_com + vk_com # * ml * 1. / (ml + mk)
+            self.state[l, 2:] = v_com + vl_com # * mk * 1. / (ml + mk)
+
+            #print(self.state[k, 2:], self.state[l, 2:])
+
+            self.state[k, :2] = rk + (dt + dtau) * self.state[k, 2:]
+            self.state[l, :2] = rl + (dt + dtau) * self.state[l, 2:]
 
 
 
@@ -109,12 +147,12 @@ class ParticleBox:
 #-------------------------------------------------------------------
 # set up initial initial state
 np.random.seed(0)
-init_state = np.random.random((20, 4))
-init_state[:, 2:] *= 0.08
+init_state = np.random.random((30, 4)) #arr([[0.4, 0.4, 0.01, 0.01], [0.6, 0.6, -0.01, -0.01]])
+init_state[:, 2:] *= 0.1
 
 scaled_G = G * 0.05 # corresponds to change of units m -> .. * m
-box = ParticleBox(init_state=init_state, ps=0.05, m=1., bounds=BOUNDS, g=scaled_G)
-dt = 1. / 100
+box = ParticleBox(init_state=init_state, ps=0.03, m=1., bounds=BOUNDS, g=scaled_G)
+dt = 1. / 70
 
 #-------------------------------------------------------------------
 # set up figure
@@ -130,11 +168,12 @@ x1, y1 = arr(box.bounds[2:]) + box.width * 0.0
 
 ax = fig.add_subplot(111, aspect='equal', autoscale_on=False,
                     xlim=(x0, x1), ylim=(y0, y1))
+
 plt.tick_params(axis='both', direction='in',
                     top=True, bottom=True, left=True, right=True,
                 labelleft=False, labelbottom=False)
 
-ms = 2*160 * box.ps
+ms = 2*165 * box.ps
 
 # plot particles
 particles, = ax.plot([], [], 'bo', ms=ms)
@@ -163,7 +202,7 @@ def animate(i):
 
     return particles, time_text
 
-animation = FuncAnimation(fig, animate, frames=None, interval=1000./100,
+animation = FuncAnimation(fig, animate, frames=800, interval=1000./70,
                             blit=True, init_func=init)
 
 # show animation
